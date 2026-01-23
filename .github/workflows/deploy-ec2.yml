@@ -23,10 +23,25 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
             cd ~/Application-Tracking-System
-            git pull origin main
-            source venv/bin/activate
+
+            # Hard sync with GitHub (clean deploy)
+            git fetch origin
+            git reset --hard origin/main
+
+            # Activate env
+            if [ -d "$HOME/venv" ]; then
+              source $HOME/venv/bin/activate
+            fi
+
+            pip install -r requirements.txt
+
+            # Kill old app safely
             pkill -f streamlit || true
-            nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 &
+
+            # Start app detached from SSH
+            nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown
+
           EOF
