@@ -4,11 +4,12 @@ import io
 import json
 import base64
 import time
+import os
 import google.generativeai as genai  # pyright: ignore[reportMissingImports]
 from google.api_core.exceptions import ResourceExhausted # type: ignore
 
 # -------------------- Gemini Setup --------------------
-genai.configure(api_key=st.secrets.GOOGLE_API_KEY)
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # Free-tier friendly model
 model = genai.GenerativeModel("models/gemini-flash-latest")
