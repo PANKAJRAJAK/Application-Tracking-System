@@ -42,6 +42,6 @@ jobs:
             pkill -f streamlit || true
 
             # Start app detached from SSH
-            nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown
+            nohup streamlit run app.py --server.port 3000 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown
 
           EOF
