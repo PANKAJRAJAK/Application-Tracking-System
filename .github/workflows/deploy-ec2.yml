@@ -69,10 +69,8 @@ jobs:
               "cd \"$REPO_DIR\"",
               "git fetch origin",
               "git reset --hard origin/main",
-              "if [ -f \"$REPO_DIR/venv/bin/activate\" ]; then",
-              "  source \"$REPO_DIR/venv/bin/activate\"",
-              "fi",
-              "pip install -r requirements.txt",
+              "test -f \"$REPO_DIR/venv/bin/activate\" && . \"$REPO_DIR/venv/bin/activate\"",
+              "python3 -m pip install -r requirements.txt",
               "pkill -f streamlit || true",
               "nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown"
             ]
@@ -91,7 +89,9 @@ jobs:
             exit 1
           fi
 
+          set +e
           aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+          STATUS=$?
 
           aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
@@ -104,3 +104,5 @@ jobs:
             --instance-id "$INSTANCE_ID" \
             --output text \
             --query 'StandardErrorContent'
+
+          exit $STATUS
