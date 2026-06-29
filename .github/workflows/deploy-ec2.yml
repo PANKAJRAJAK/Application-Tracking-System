@@ -21,6 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
 
           if [ -z "$EC2_SSH_KEY" ]; then
             echo "EC2_SSH_KEY secret is not set." >&2
@@ -32,9 +33,22 @@ jobs:
             exit 1
           fi
 
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          ssh_dir = Path.home() / ".ssh"
+          ssh_dir.mkdir(parents=True, exist_ok=True)
+          ssh_dir.chmod(0o700)
+
+          key_path = ssh_dir / "id_ed25519"
+          key_path.write_text(os.environ["EC2_SSH_KEY"].rstrip("\n") + "\n", encoding="utf-8")
+          key_path.chmod(0o600)
+
+          config_path = ssh_dir / "config"
+          config_path.write_text("Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel ERROR\n", encoding="utf-8")
+          config_path.chmod(0o600)
+          PY
 
       - name: Deploy to EC2
         env:
