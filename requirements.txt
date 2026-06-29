@@ -1,8 +1,9 @@
 streamlit
-google-generativeai
 python-dotenv
 PyPDF2
 pdf2image
 Pillow
 numpy
 pandas
+huggingface_hub
+requests

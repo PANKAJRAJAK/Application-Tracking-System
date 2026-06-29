@@ -3,42 +3,34 @@ import pdf2image  # pyright: ignore[reportMissingImports]
 import io
 import json
 import base64
-import time
 import os
-import google.generativeai as genai  # pyright: ignore[reportMissingImports]
-from google.api_core.exceptions import ResourceExhausted # type: ignore
+import requests
 
-# -------------------- Gemini Setup --------------------
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-# Free-tier friendly model
-model = genai.GenerativeModel("models/gemini-flash-latest")
+HF_API_KEY = os.environ["HF_API_KEY"]
+API_URL = "https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct"
+headers = {
+    "Authorization": f"Bearer {HF_API_KEY}"
+}
 
 # -------------------- Helper Functions --------------------
 
-def get_gemini_response(prompt, pdf_content, job_description):
-    try:
-        response = model.generate_content(
-            [prompt, pdf_content[0], job_description],
-            generation_config={"temperature": 0.2}
-        )
-        return response.text
-    except ResourceExhausted:
-        time.sleep(10)
-        return "⚠️ Gemini API quota exceeded. Please wait a few seconds and try again."
-
-def get_gemini_response_keywords(prompt, pdf_content, job_description):
-    try:
-        response = model.generate_content(
-            [prompt, pdf_content[0], job_description],
-            generation_config={"temperature": 0.2}
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            text = text[7:-3]
-        return json.loads(text)
-    except (ResourceExhausted, json.JSONDecodeError):
-        return None
+def get_llm_response(prompt):
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 700,
+            "temperature": 0.2
+        }
+    }
+    response = requests.post(
+        API_URL,
+        headers=headers,
+        json=payload
+    )
+    result = response.json()
+    if isinstance(result, list):
+        return result[0]["generated_text"]
+    return str(result)
 
 @st.cache_data(show_spinner=False)
 def input_pdf_setup(uploaded_file):
@@ -119,26 +111,49 @@ def validate_inputs():
 if submit1 and validate_inputs():
     with st.spinner("Analyzing resume..."):
         pdf_content = input_pdf_setup(st.session_state.resume)
-        response = get_gemini_response(input_prompt1, pdf_content, input_text)
+        prompt = f"""Job Description
+{input_text}
+Resume
+{pdf_content}
+Instructions
+{input_prompt1}"""
+        response = get_llm_response(prompt)
         st.subheader("Resume Evaluation")
         st.write(response)
 
 elif submit2 and validate_inputs():
     with st.spinner("Extracting keywords..."):
         pdf_content = input_pdf_setup(st.session_state.resume)
-        response = get_gemini_response_keywords(input_prompt2, pdf_content, input_text)
+        prompt = f"""Job Description
+{input_text}
+Resume
+{pdf_content}
+Instructions
+{input_prompt2}"""
+        response = get_llm_response(prompt)
 
-        if response:
+        try:
+            parsed_response = json.loads(response)
+        except json.JSONDecodeError:
+            parsed_response = None
+
+        if parsed_response:
             st.subheader("Extracted Skills")
-            st.write(f"**Technical Skills:** {', '.join(response.get('Technical Skills', []))}")
-            st.write(f"**Analytical Skills:** {', '.join(response.get('Analytical Skills', []))}")
-            st.write(f"**Soft Skills:** {', '.join(response.get('Soft Skills', []))}")
+            st.write(f"**Technical Skills:** {', '.join(parsed_response.get('Technical Skills', []))}")
+            st.write(f"**Analytical Skills:** {', '.join(parsed_response.get('Analytical Skills', []))}")
+            st.write(f"**Soft Skills:** {', '.join(parsed_response.get('Soft Skills', []))}")
         else:
             st.error("Could not extract skills. Please try again.")
 
 elif submit3 and validate_inputs():
     with st.spinner("Calculating match percentage..."):
         pdf_content = input_pdf_setup(st.session_state.resume)
-        response = get_gemini_response(input_prompt3, pdf_content, input_text)
+        prompt = f"""Job Description
+{input_text}
+Resume
+{pdf_content}
+Instructions
+{input_prompt3}"""
+        response = get_llm_response(prompt)
         st.subheader("ATS Match Result")
         st.write(response)
