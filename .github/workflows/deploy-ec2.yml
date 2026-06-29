@@ -65,6 +65,7 @@ jobs:
               "set -e",
               "REPO_DIR=\"$HOME/Application-Tracking-System\"",
               "if [ -d /home/ubuntu/Application-Tracking-System ]; then REPO_DIR=/home/ubuntu/Application-Tracking-System; elif [ -d /home/ec2-user/Application-Tracking-System ]; then REPO_DIR=/home/ec2-user/Application-Tracking-System; fi",
+              "git config --global --add safe.directory $REPO_DIR",
               "mkdir -p \"$REPO_DIR\"",
               "cd \"$REPO_DIR\"",
               "git fetch origin",
