@@ -12,13 +12,12 @@ A powerful and user-friendly web application built with Streamlit for analyzing 
   - **Profile Evaluation**: Get detailed feedback on strengths and areas for improvement.
   - **Keyword Extraction**: Identify key skills and terms to optimize your resume.
   - **Match Percentage**: Receive a percentage score of resume-job alignment, including missing keywords and actionable insights.
-- **AI-Powered Insights**: Leverages Google Gemini for intelligent analysis.
+- **AI-Powered Insights**: Provides intelligent analysis for resumes and job descriptions.
 - **User-Friendly Interface**: Intuitive design for quick and easy use.
 
 ## 📋 Prerequisites
 
 - Python 3.8 or higher
-- A valid Google Gemini API key (for AI analysis)
 
 ## 🛠 Installation
 
@@ -34,8 +33,7 @@ A powerful and user-friendly web application built with Streamlit for analyzing 
    ```
 
 3. **Set Up Environment Variables**:
-   - Obtain a Google Gemini API key.
-   - Create a `.env` file or set environment variables for API access.
+   - Create a `.env` file or set environment variables if required by your environment.
 
 4. **Run the Application**:
    ```bash
@@ -60,7 +58,7 @@ A powerful and user-friendly web application built with Streamlit for analyzing 
 - **Python**: Core programming language.
 - **Streamlit**: Framework for building the web interface.
 - **pdf2image**: For processing PDF files.
-- **Google Gemini**: AI model for natural language processing and analysis.
+- **AI Services**: For natural language processing and analysis.
 
 ## 🤝 Contributing
 
