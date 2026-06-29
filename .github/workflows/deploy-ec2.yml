@@ -14,78 +14,81 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Setup SSH
+      - name: Deploy to EC2 via SSM
         env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          if [ -z "$EC2_SSH_KEY" ]; then
-            echo "EC2_SSH_KEY secret is not set." >&2
-            exit 1
-          fi
-
-          if [ -z "$EC2_HOST" ]; then
-            echo "EC2_HOST secret is not set." >&2
-            exit 1
-          fi
-
-          python - <<'PY'
-          import os
-          from pathlib import Path
-
-          ssh_dir = Path.home() / ".ssh"
-          ssh_dir.mkdir(parents=True, exist_ok=True)
-          ssh_dir.chmod(0o700)
-
-          key_path = ssh_dir / "id_ed25519"
-          key_path.write_text(os.environ["EC2_SSH_KEY"].rstrip("\n") + "\n", encoding="utf-8")
-          key_path.chmod(0o600)
-
-          config_path = ssh_dir / "config"
-          config_path.write_text("Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel ERROR\n", encoding="utf-8")
-          config_path.chmod(0o600)
-          PY
-
-      - name: Deploy to EC2
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          EC2_INSTANCE_NAME: ${{ secrets.EC2_INSTANCE_NAME }}
         run: |
           set -euo pipefail
 
-          if [ -z "$EC2_USER" ]; then
-            echo "EC2_USER secret is not set." >&2
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "AWS_ACCESS_KEY_ID secret is not set." >&2
             exit 1
           fi
 
-          if [ -z "$EC2_HOST" ]; then
-            echo "EC2_HOST secret is not set." >&2
+          if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "AWS_SECRET_ACCESS_KEY secret is not set." >&2
             exit 1
           fi
 
-          ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" << 'EOF'
-            set -e
-            cd ~/Application-Tracking-System
+          if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+            echo "AWS_REGION secret is not set." >&2
+            exit 1
+          fi
 
-            # Hard sync with GitHub (clean deploy)
-            git fetch origin
-            git reset --hard origin/main
+          INSTANCE_NAME="${EC2_INSTANCE_NAME:-ATSAIServer}"
+          INSTANCE_ID="$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${INSTANCE_NAME}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)"
 
-            # Activate env
-            if [ -d "$HOME/venv" ]; then
-              source $HOME/venv/bin/activate
-            fi
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not find a running EC2 instance named ${INSTANCE_NAME}." >&2
+            exit 1
+          fi
 
-            pip install -r requirements.txt
+          cat > /tmp/ssm-commands.json <<'JSON'
+          {
+            "commands": [
+              "set -e",
+              "REPO_DIR=\"$HOME/Application-Tracking-System\"",
+              "if [ -d /home/ubuntu/Application-Tracking-System ]; then REPO_DIR=/home/ubuntu/Application-Tracking-System; elif [ -d /home/ec2-user/Application-Tracking-System ]; then REPO_DIR=/home/ec2-user/Application-Tracking-System; fi",
+              "mkdir -p \"$REPO_DIR\"",
+              "cd \"$REPO_DIR\"",
+              "git fetch origin",
+              "git reset --hard origin/main",
+              "if [ -d \"$HOME/venv\" ]; then source \"$HOME/venv/bin/activate\"; fi",
+              "pip install -r requirements.txt",
+              "pkill -f streamlit || true",
+              "nohup streamlit run app.py --server.port 3000 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown"
+            ]
+          }
+          JSON
 
-            # Kill old app safely
-            pkill -f streamlit || true
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters file:///tmp/ssm-commands.json \
+            --output text \
+            --query 'Command.CommandId')"
 
-            # Start app detached from SSH
-            nohup streamlit run app.py --server.port 3000 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown
+          if [ -z "$COMMAND_ID" ]; then
+            echo "Failed to create an SSM command on instance ${INSTANCE_ID}." >&2
+            exit 1
+          fi
 
-          EOF
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --output text \
+            --query 'StandardOutputContent'
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --output text \
+            --query 'StandardErrorContent'
