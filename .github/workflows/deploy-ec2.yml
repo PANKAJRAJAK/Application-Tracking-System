@@ -69,10 +69,12 @@ jobs:
               "cd \"$REPO_DIR\"",
               "git fetch origin",
               "git reset --hard origin/main",
-              "if [ -d \"$HOME/venv\" ]; then source \"$HOME/venv/bin/activate\"; fi",
+              "if [ -f \"$REPO_DIR/venv/bin/activate\" ]; then",
+              "  source \"$REPO_DIR/venv/bin/activate\"",
+              "fi",
               "pip install -r requirements.txt",
               "pkill -f streamlit || true",
-              "nohup streamlit run app.py --server.port 3000 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown"
+              "nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > streamlit.log 2>&1 & disown"
             ]
           }
           JSON
